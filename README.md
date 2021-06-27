@@ -7,8 +7,10 @@
 ## Installation
 
 Rebuild caddy as follows:
-TODO
 
+```sh
+xcaddy build --with github.com/liuzl/caddy2-zlog
+```
 
 ## Caddyfile syntax
 
