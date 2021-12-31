@@ -39,11 +39,12 @@ func init() {
 var once sync.Once
 var c Chain
 
-// Middleware implements an HTTP handler that writes the
-// visitor's IP address to a file or stream.
+// Middleware implements an HTTP handler that logs the
+// whole response by zerolog.
 type Middleware struct {
 	LogDir  string `json:"log_dir,omitempty"`
 	SplitBy string `json:"split_by,omitempty"`
+	HashDir string `json:"hash_dir,omitempty"`
 }
 
 // CaddyModule returns the Caddy module information.
@@ -61,6 +62,9 @@ func (m *Middleware) Provision(ctx caddy.Context) error {
 	}
 	if m.SplitBy == "" {
 		m.SplitBy = "day"
+	}
+	if m.HashDir == "on" {
+		m.HashDir = filepath.Join(filepath.Dir(os.Args[0]), "hashdata")
 	}
 	return nil
 }
@@ -85,6 +89,7 @@ func (m Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddy
 		} else {
 			out = f
 		}
+
 		log := zerolog.New(out).With().
 			Timestamp().
 			Str("service", filepath.Base(os.Args[0])).
@@ -119,6 +124,17 @@ func (m Middleware) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddy
 		c = c.Append(ResponseHeaderHandler("Cost", "float"))
 		c = c.Append(DumpResponseHandler("response"))
 		c = c.Append(DumpRequestHandler("request"))
+
+		// init the hash file store
+		if m.HashDir != "" {
+			var err error
+			c.hashStore, err = filestore.NewFileStorePro(m.HashDir, m.SplitBy)
+			if err != nil {
+				c.hashStore = nil
+				fmt.Fprintf(os.Stderr, "err: %+v, open %s error\n", err, m.HashDir)
+			}
+		}
+
 	})
 	return c.Then(next).ServeHTTP(w, r)
 }
@@ -138,6 +154,10 @@ func (m *Middleware) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					m.SplitBy = d.Val()
 				}
 				// ...
+			case "hash_dir":
+				if d.NextArg() {
+					m.HashDir = d.Val()
+				}
 			}
 		}
 	}

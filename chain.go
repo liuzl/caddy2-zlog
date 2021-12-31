@@ -1,6 +1,9 @@
 package zlog
 
-import "github.com/caddyserver/caddy/v2/modules/caddyhttp"
+import (
+	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
+	"github.com/liuzl/filestore"
+)
 
 // A constructor for a piece of middleware.
 // Some middleware use this constructor out of the box,
@@ -13,6 +16,7 @@ type Constructor func(caddyhttp.Handler) caddyhttp.Handler
 // the same set of constructors in the same order.
 type Chain struct {
 	constructors []Constructor
+	hashStore    *filestore.FileStore
 }
 
 // New creates a new chain,
@@ -20,7 +24,7 @@ type Chain struct {
 // New serves no other function,
 // constructors are only called upon a call to Then().
 func NewChain(constructors ...Constructor) Chain {
-	return Chain{append(([]Constructor)(nil), constructors...)}
+	return Chain{append(([]Constructor)(nil), constructors...), nil}
 }
 
 // Then chains the middleware and returns the final caddyhttp.Handler.
@@ -81,7 +85,7 @@ func (c Chain) Append(constructors ...Constructor) Chain {
 	newCons = append(newCons, c.constructors...)
 	newCons = append(newCons, constructors...)
 
-	return Chain{newCons}
+	return Chain{newCons, c.hashStore}
 }
 
 // Extend extends a chain by adding the specified chain

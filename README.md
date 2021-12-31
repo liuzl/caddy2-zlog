@@ -19,6 +19,7 @@ xcaddy build --with github.com/liuzl/caddy2-zlog
     zlog {
         log_dir ./server_zerolog
         split_by hour
+        hash_dir ./hashstore
     }
 }
 ```

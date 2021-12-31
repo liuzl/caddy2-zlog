@@ -2,10 +2,13 @@ package zlog
 
 import (
 	"bytes"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
@@ -13,6 +16,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/zenazn/goji/web/mutil"
+	"zliu.org/goutil"
 )
 
 // FromRequest gets the logger in the request's context.
@@ -179,19 +183,51 @@ func RequestIDHandler(fieldKey, headerName string) func(next caddyhttp.Handler) 
 	}
 }
 
+func hashPostRequest(req string) string {
+	parts := strings.Split(req, "\r\n\r\n")
+	if len(parts) != 2 {
+		return req
+	}
+	postData, err := url.ParseQuery(parts[1])
+	if err != nil {
+		return req
+	}
+	urlVal := url.Values{}
+	for k, _ := range postData {
+		v := postData.Get(k)
+		if len(v) > 10000 {
+			md5 := goutil.MD5(v)
+			urlVal.Set(fmt.Sprintf("md5-%s", k), md5)
+			// store the raw value in c.hashStore
+			if c.hashStore != nil {
+				line, _ := goutil.JSONMarshal(map[string]string{"field": k, "md5": md5, "content": v})
+				c.hashStore.WriteLine(line)
+			}
+		} else {
+			urlVal.Set(k, v)
+		}
+	}
+	ret := fmt.Sprintf("%s\r\n\r\n%s", parts[0], urlVal.Encode())
+	return ret
+}
+
 func DumpRequestHandler(fieldKey string) func(next caddyhttp.Handler) caddyhttp.Handler {
 	return func(next caddyhttp.Handler) caddyhttp.Handler {
 		return caddyhttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) error {
 			log := zerolog.Ctx(r.Context())
-			log.UpdateContext(func(c zerolog.Context) zerolog.Context {
+			log.UpdateContext(func(ctx zerolog.Context) zerolog.Context {
 				res, err := httputil.DumpRequest(r, true)
 				var msg string
 				if err != nil {
 					msg = err.Error()
 				} else {
-					msg = string(res)
+					if c.hashStore == nil {
+						msg = string(res)
+					} else {
+						msg = hashPostRequest(string(res))
+					}
 				}
-				return c.Str(fieldKey, msg)
+				return ctx.Str(fieldKey, msg)
 			})
 			return next.ServeHTTP(w, r)
 		})
