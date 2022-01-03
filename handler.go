@@ -195,7 +195,7 @@ func hashPostRequest(req string) string {
 	urlVal := url.Values{}
 	for k, _ := range postData {
 		v := postData.Get(k)
-		if len(v) > 10000 {
+		if len(v) > 1000 {
 			md5 := goutil.MD5(v)
 			urlVal.Set(fmt.Sprintf("md5-%s", k), md5)
 			// store the raw value in c.hashStore
